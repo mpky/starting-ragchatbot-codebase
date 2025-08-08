@@ -4,7 +4,7 @@ from document_processor import DocumentProcessor
 from vector_store import VectorStore
 from ai_generator import AIGenerator
 from session_manager import SessionManager
-from search_tools import ToolManager, CourseSearchTool
+from search_tools import ToolManager, CourseSearchTool, CourseOutlineTool
 from models import Course, Lesson, CourseChunk
 
 class RAGSystem:
@@ -22,7 +22,9 @@ class RAGSystem:
         # Initialize search tools
         self.tool_manager = ToolManager()
         self.search_tool = CourseSearchTool(self.vector_store)
+        self.outline_tool = CourseOutlineTool(self.vector_store)
         self.tool_manager.register_tool(self.search_tool)
+        self.tool_manager.register_tool(self.outline_tool)
     
     def add_course_document(self, file_path: str) -> Tuple[Course, int]:
         """
@@ -110,21 +112,39 @@ class RAGSystem:
         Returns:
             Tuple of (response, sources list - empty for tool-based approach)
         """
+        print(f"RAG system processing query: '{query}' (session: {session_id})")
+        
+        # Check if API key is available
+        if not self.config.ANTHROPIC_API_KEY:
+            print("No API key available, returning placeholder message")
+            return "I will tell you the answer once I am plugged in (have an API key).", []
+        
         # Create prompt for the AI with clear instructions
         prompt = f"""Answer this question about course materials: {query}"""
+        print(f"Generated prompt for AI: '{prompt}'")
         
         # Get conversation history if session exists
         history = None
         if session_id:
             history = self.session_manager.get_conversation_history(session_id)
+            if history:
+                print(f"Using conversation history: {len(history)} chars")
+            else:
+                print("No conversation history found")
         
-        # Generate response using AI with tools
-        response = self.ai_generator.generate_response(
-            query=prompt,
-            conversation_history=history,
-            tools=self.tool_manager.get_tool_definitions(),
-            tool_manager=self.tool_manager
-        )
+        try:
+            # Generate response using AI with tools
+            print("Calling AI generator...")
+            response = self.ai_generator.generate_response(
+                query=prompt,
+                conversation_history=history,
+                tools=self.tool_manager.get_tool_definitions(),
+                tool_manager=self.tool_manager
+            )
+            print(f"AI generator returned response: {len(response)} chars")
+        except Exception as e:
+            print(f"AI generator failed: {str(e)}")
+            raise  # Re-raise for proper error handling in API layer
         
         # Get sources from the search tool
         sources = self.tool_manager.get_last_sources()

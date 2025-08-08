@@ -102,16 +102,45 @@ class VectorStore:
     def _resolve_course_name(self, course_name: str) -> Optional[str]:
         """Use vector search to find best matching course by name"""
         try:
+            print(f"Resolving course name: '{course_name}'")
+            
+            # First, try exact match or simple substring match with existing titles
+            existing_titles = self.get_existing_course_titles()
+            print(f"Available courses: {existing_titles}")
+            
+            # Exact match (case insensitive)
+            for title in existing_titles:
+                if course_name.lower() == title.lower():
+                    print(f"Exact match found: {title}")
+                    return title
+            
+            # Partial match (course_name is substring of title)
+            for title in existing_titles:
+                if course_name.lower() in title.lower():
+                    print(f"Partial match found: {title}")
+                    return title
+            
+            # If no simple match, try vector search
             results = self.course_catalog.query(
                 query_texts=[course_name],
                 n_results=1
             )
             
-            if results['documents'][0] and results['metadatas'][0]:
-                # Return the title (which is now the ID)
-                return results['metadatas'][0][0]['title']
+            if results['documents'] and results['documents'][0] and results['metadatas'] and results['metadatas'][0]:
+                resolved_title = results['metadatas'][0][0]['title']
+                print(f"Vector search resolved to: {resolved_title}")
+                
+                # Only return if the similarity is reasonable (check distance)
+                if results['distances'] and results['distances'][0] and results['distances'][0][0] < 0.7:
+                    return resolved_title
+                else:
+                    print(f"Vector search distance too high: {results['distances'][0][0] if results['distances'] else 'N/A'}")
+            
+            print(f"No match found for course name: '{course_name}'")
         except Exception as e:
-            print(f"Error resolving course name: {e}")
+            print(f"Error resolving course name '{course_name}': {e}")
+            import traceback
+            traceback.print_exc()
         
         return None
     

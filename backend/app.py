@@ -57,33 +57,65 @@ class CourseStats(BaseModel):
 async def query_documents(request: QueryRequest):
     """Process a query and return response with sources"""
     try:
+        # Log the incoming request
+        print(f"Processing query: '{request.query}' (session: {request.session_id})")
+        
+        # Validate request
+        if not request.query or not request.query.strip():
+            raise HTTPException(status_code=400, detail="Query cannot be empty")
+        
+        if len(request.query) > 5000:  # Reasonable limit
+            raise HTTPException(status_code=400, detail="Query too long (max 5000 characters)")
+        
         # Create session if not provided
         session_id = request.session_id
         if not session_id:
             session_id = rag_system.session_manager.create_session()
+            print(f"Created new session: {session_id}")
         
         # Process query using RAG system
         answer, sources = rag_system.query(request.query, session_id)
+        
+        print(f"Query processed successfully. Response length: {len(answer)} chars, Sources: {len(sources)}")
         
         return QueryResponse(
             answer=answer,
             sources=sources,
             session_id=session_id
         )
+    except HTTPException:
+        # Re-raise HTTP exceptions as-is
+        raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        # Log the full error for debugging
+        print(f"Query processing error: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        
+        # Return user-friendly error message
+        if "API key" in str(e).lower():
+            raise HTTPException(status_code=503, detail="AI service is not available. Please check configuration.")
+        elif "database" in str(e).lower() or "chroma" in str(e).lower():
+            raise HTTPException(status_code=503, detail="Database service is not available.")
+        else:
+            raise HTTPException(status_code=500, detail=f"Query processing failed: {str(e)}")
 
 @app.get("/api/courses", response_model=CourseStats)
 async def get_course_stats():
     """Get course analytics and statistics"""
     try:
+        print("Loading course analytics...")
         analytics = rag_system.get_course_analytics()
+        print(f"Found {analytics['total_courses']} courses")
         return CourseStats(
             total_courses=analytics["total_courses"],
             course_titles=analytics["course_titles"]
         )
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        print(f"Error loading course stats: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Failed to load course statistics: {str(e)}")
 
 @app.on_event("startup")
 async def startup_event():

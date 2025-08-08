@@ -5,7 +5,7 @@ const API_URL = '/api';
 let currentSessionId = null;
 
 // DOM elements
-let chatMessages, chatInput, sendButton, totalCourses, courseTitles;
+let chatMessages, chatInput, sendButton, totalCourses, courseTitles, newChatButton;
 
 // Initialize
 document.addEventListener('DOMContentLoaded', () => {
@@ -15,6 +15,7 @@ document.addEventListener('DOMContentLoaded', () => {
     sendButton = document.getElementById('sendButton');
     totalCourses = document.getElementById('totalCourses');
     courseTitles = document.getElementById('courseTitles');
+    newChatButton = document.getElementById('newChatButton');
     
     setupEventListeners();
     createNewSession();
@@ -28,6 +29,9 @@ function setupEventListeners() {
     chatInput.addEventListener('keypress', (e) => {
         if (e.key === 'Enter') sendMessage();
     });
+    
+    // New chat button
+    newChatButton.addEventListener('click', createNewSession);
     
     
     // Suggested questions
@@ -71,7 +75,18 @@ async function sendMessage() {
             })
         });
 
-        if (!response.ok) throw new Error('Query failed');
+        if (!response.ok) {
+            // Get detailed error message from server
+            let errorMessage = 'Query failed';
+            try {
+                const errorData = await response.json();
+                errorMessage = errorData.detail || errorData.message || `Server error (${response.status})`;
+            } catch {
+                // If JSON parsing fails, use response status
+                errorMessage = `Server error (${response.status}): ${response.statusText}`;
+            }
+            throw new Error(errorMessage);
+        }
 
         const data = await response.json();
         
@@ -85,9 +100,16 @@ async function sendMessage() {
         addMessage(data.answer, 'assistant', data.sources);
 
     } catch (error) {
-        // Replace loading message with error
+        // Replace loading message with detailed error
         loadingMessage.remove();
-        addMessage(`Error: ${error.message}`, 'assistant');
+        console.error('Query error:', error);
+        
+        // Show user-friendly error message
+        const userMessage = error.message.includes('Failed to fetch') ? 
+            'Unable to connect to server. Please check your connection and try again.' :
+            `Error: ${error.message}`;
+            
+        addMessage(userMessage, 'assistant');
     } finally {
         chatInput.disabled = false;
         sendButton.disabled = false;
@@ -122,10 +144,24 @@ function addMessage(content, type, sources = null, isWelcome = false) {
     let html = `<div class="message-content">${displayContent}</div>`;
     
     if (sources && sources.length > 0) {
+        // Generate clickable source links
+        const sourceLinks = sources.map(source => {
+            if (typeof source === 'object' && source.text) {
+                if (source.url) {
+                    return `<a href="${source.url}" target="_blank">${source.text}</a>`;
+                } else {
+                    return source.text;
+                }
+            } else {
+                // Fallback for plain text sources (backward compatibility)
+                return source;
+            }
+        }).join(', ');
+        
         html += `
             <details class="sources-collapsible">
                 <summary class="sources-header">Sources</summary>
-                <div class="sources-content">${sources.join(', ')}</div>
+                <div class="sources-content">${sourceLinks}</div>
             </details>
         `;
     }
