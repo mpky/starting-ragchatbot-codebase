@@ -22,6 +22,23 @@ uv sync
 ANTHROPIC_API_KEY=your_api_key_here
 ```
 
+### Code Quality Tools
+```bash
+# Format code with Black and isort
+uv run black backend/ main.py
+uv run isort backend/ main.py
+
+# Run linting with flake8
+uv run flake8 backend/ main.py
+
+# Run all quality checks (format + lint + test)
+./scripts/quality.sh
+
+# Individual scripts
+./scripts/format.sh  # Format code
+./scripts/lint.sh    # Run linting only
+```
+
 ### Access Points
 - Web Interface: http://localhost:8000
 - API Documentation: http://localhost:8000/docs
